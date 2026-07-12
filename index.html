@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#4f46e5" />
+  <meta name="description" content="BoletApps - Registro de asignaciones de combustible" />
+  <title>BoletApps</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="manifest" href="manifest.json" />
+  <script>
+    // Aplicar tema guardado antes de renderizar (evita flash)
+    (function() {
+      var t = localStorage.getItem('boletapps_theme') || 'light';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+</head>
+<body>
+
+  <!-- ============ LOGIN ============ -->
+  <div id="login-screen" class="ba-login-screen">
+    <div class="ba-login-card">
+      <div class="ba-login-logo">
+        <div class="ba-logo-icon">⛽</div>
+        <h1>BoletApps</h1>
+        <p>Registro de Asignaciones de Combustible</p>
+      </div>
+      <form id="login-form" class="ba-login-form">
+        <label for="login-code">Ingrese su código numérico</label>
+        <input
+          type="password"
+          id="login-code"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          maxlength="8"
+          autocomplete="off"
+          placeholder="• • • •"
+          required
+        />
+        <button type="submit" class="ba-btn ba-btn-primary ba-btn-block">Entrar</button>
+        <p id="login-error" class="ba-login-error"></p>
+      </form>
+      <div class="ba-login-hint">¿Primera vez? El código inicial es <strong>1234</strong> (cámbialo en Administración).</div>
+    </div>
+  </div>
+
+  <!-- ============ APP ============ -->
+  <div id="app-screen" class="ba-app" hidden>
+
+    <!-- OFFLINE BANNER -->
+    <div id="offline-banner" class="ba-offline-banner">📡 Sin conexión — modo offline activo</div>
+
+    <!-- HEADER -->
+    <header class="ba-header">
+      <div class="ba-header-title">
+        <span class="ba-header-logo">⛽</span>
+        <span>BoletApps</span>
+      </div>
+      <div class="ba-header-section" id="header-section-name">Dashboard</div>
+      <button id="theme-toggle" class="ba-theme-toggle" title="Cambiar tema">🌙</button>
+      <button id="logout-btn" class="ba-header-logout" title="Cerrar sesión">⏻</button>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <main class="ba-main" id="main-content">
+
+      <!-- ====== DASHBOARD ====== -->
+      <section class="ba-section" data-section="dashboard">
+        <div class="ba-section-header">
+          <h2>Dashboard</h2>
+          <p class="ba-section-subtitle">Control de combustible asignado</p>
+        </div>
+
+        <div class="ba-dashboard-filters">
+          <label>
+            Fecha
+            <input type="date" id="dash-fecha" />
+          </label>
+          <label>
+            Servicentro
+            <select id="dash-servicentro"></select>
+          </label>
+          <button class="ba-btn ba-btn-primary" id="dash-refresh">Actualizar</button>
+        </div>
+
+        <div class="ba-dashboard-cards" id="dashboard-cards"></div>
+
+        <div class="ba-chart-container">
+          <h3>📊 Distribución por Tipo de Combustible</h3>
+          <div class="ba-chart-canvas-wrap">
+            <canvas id="chart-distribucion"></canvas>
+          </div>
+        </div>
+
+        <div class="ba-chart-container">
+          <h3>📈 Inicio vs Distribuido vs Restante</h3>
+          <div class="ba-chart-canvas-wrap">
+            <canvas id="chart-comparativo"></canvas>
+          </div>
+        </div>
+
+        <div class="ba-chart-container">
+          <h3>🥧 Privado vs Estatal</h3>
+          <div class="ba-chart-canvas-wrap">
+            <canvas id="chart-tipo-pago"></canvas>
+          </div>
+        </div>
+
+        <div class="ba-dashboard-parte" id="dashboard-parte"></div>
+
+        <div class="ba-dashboard-distribucion" id="dashboard-distribucion"></div>
+      </section>
+
+      <!-- ====== REGISTRO ====== -->
+      <section class="ba-section" data-section="registro" hidden>
+        <div class="ba-section-header">
+          <h2>Registro de Boletas</h2>
+          <p class="ba-section-subtitle">CRUD de asignaciones de combustible</p>
+        </div>
+
+        <button class="ba-btn ba-btn-primary ba-btn-block" id="btn-nueva-boleta">+ Nueva Boleta</button>
+
+        <div class="ba-list-filter">
+          <input type="search" id="search-boleta" placeholder="Buscar por ID, chapa, asignación..." />
+        </div>
+
+        <div class="ba-list" id="lista-boletas"></div>
+      </section>
+
+      <!-- ====== PARTES DIARIOS ====== -->
+      <section class="ba-section" data-section="partes" hidden>
+        <div class="ba-section-header">
+          <h2>Partes Diarios</h2>
+          <p class="ba-section-subtitle">Combustible al amanecer por servicentro</p>
+        </div>
+
+        <button class="ba-btn ba-btn-primary ba-btn-block" id="btn-nuevo-parte">+ Nuevo Parte Diario</button>
+
+        <div class="ba-list-filter">
+          <input type="search" id="search-parte" placeholder="Buscar por servicentro..." />
+        </div>
+
+        <div class="ba-list" id="lista-partes"></div>
+      </section>
+
+      <!-- ====== REPORTES ====== -->
+      <section class="ba-section" data-section="reportes" hidden>
+        <div class="ba-section-header">
+          <h2>Reportes</h2>
+          <p class="ba-section-subtitle">Control de combustible asignado por rango de fechas</p>
+        </div>
+
+        <div class="ba-report-filters">
+          <div class="ba-form-row">
+            <label>
+              Desde
+              <input type="date" id="rep-fecha-inicio" />
+            </label>
+            <label>
+              Hasta
+              <input type="date" id="rep-fecha-fin" />
+            </label>
+          </div>
+          <div class="ba-form-row">
+            <label>
+              Servicentro
+              <select id="rep-servicentro"></select>
+            </label>
+            <label>
+              Combustible
+              <select id="rep-combustible"></select>
+            </label>
+          </div>
+          <div class="ba-form-row">
+            <label>
+              Tipo Pago
+              <select id="rep-tipo-pago">
+                <option value="todos">Todos</option>
+                <option value="PRIVADO">Privado</option>
+                <option value="ESTATAL">Estatal</option>
+              </select>
+            </label>
+          </div>
+          <div class="ba-form-row">
+            <button class="ba-btn ba-btn-primary ba-btn-block" id="btn-generar-reporte">Generar Reporte</button>
+          </div>
+        </div>
+
+        <div id="reporte-resultado"></div>
+      </section>
+
+      <!-- ====== PRECONFIGURACION ====== -->
+      <section class="ba-section" data-section="config" hidden>
+        <div class="ba-section-header">
+          <h2>Preconfiguración</h2>
+          <p class="ba-section-subtitle">Configuración de servicentros y tipos de combustible</p>
+        </div>
+
+        <div class="ba-config-block">
+          <h3>⛽ Servicentros</h3>
+          <div class="ba-config-input">
+            <input type="text" id="input-new-servicentro" placeholder="Nombre del servicentro" />
+            <button class="ba-btn ba-btn-primary" id="btn-add-servicentro">+</button>
+          </div>
+          <ul class="ba-config-list" id="lista-servicentros"></ul>
+        </div>
+
+        <div class="ba-config-block">
+          <h3>🛢️ Tipos de Combustible</h3>
+          <div class="ba-config-input">
+            <input type="text" id="input-new-combustible" placeholder="Tipo de combustible" />
+            <button class="ba-btn ba-btn-primary" id="btn-add-combustible">+</button>
+          </div>
+          <ul class="ba-config-list" id="lista-combustibles"></ul>
+        </div>
+      </section>
+
+      <!-- ====== ADMINISTRACION ====== -->
+      <section class="ba-section" data-section="admin" hidden>
+        <div class="ba-section-header">
+          <h2>Administración</h2>
+          <p class="ba-section-subtitle">Backups, import/export y código de acceso</p>
+        </div>
+
+        <div class="ba-config-block">
+          <h3>🔐 Código de Acceso</h3>
+          <div class="ba-config-input">
+            <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" id="input-new-code" placeholder="Nuevo código" />
+            <button class="ba-btn ba-btn-primary" id="btn-change-code">Cambiar</button>
+          </div>
+        </div>
+
+        <div class="ba-config-block">
+          <h3>💾 Backups</h3>
+          <div class="ba-admin-actions">
+            <button class="ba-btn ba-btn-primary" id="btn-create-backup">Crear Backup</button>
+            <button class="ba-btn ba-btn-secondary" id="btn-export-all">Exportar TODO (JSON)</button>
+            <label class="ba-btn ba-btn-secondary ba-file-label">
+              Importar JSON
+              <input type="file" id="input-import-json" accept=".json,application/json" hidden />
+            </label>
+          </div>
+          <div class="ba-list" id="lista-backups"></div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- BOTTOM NAV -->
+    <nav class="ba-bottom-nav">
+      <button class="ba-nav-item active" data-target="dashboard">
+        <span class="ba-nav-icon">📊</span>
+        <span>Dashboard</span>
+      </button>
+      <button class="ba-nav-item" data-target="registro">
+        <span class="ba-nav-icon">🧾</span>
+        <span>Registro</span>
+      </button>
+      <button class="ba-nav-item" data-target="partes">
+        <span class="ba-nav-icon">📋</span>
+        <span>Partes</span>
+      </button>
+      <button class="ba-nav-item" data-target="reportes">
+        <span class="ba-nav-icon">📈</span>
+        <span>Reportes</span>
+      </button>
+      <button class="ba-nav-item" data-target="config">
+        <span class="ba-nav-icon">⚙️</span>
+        <span>Config</span>
+      </button>
+      <button class="ba-nav-item" data-target="admin">
+        <span class="ba-nav-icon">🛠️</span>
+        <span>Admin</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- ============ MODAL CONTAINER ============ -->
+  <div id="modal-container"></div>
+
+  <!-- ============ TOAST ============ -->
+  <div id="toast" class="ba-toast"></div>
+
+  <!-- ============ LIBRERÍAS (locales para offline) ============ -->
+  <script src="lib/chart.min.js"></script>
+  <script src="lib/jspdf.umd.min.js"></script>
+  <script src="lib/xlsx.full.min.js"></script>
+  <script src="lib/FileSaver.min.js"></script>
+
+  <!-- ============ SCRIPTS ============ -->
+  <script src="js/db.js"></script>
+  <script src="js/share.js"></script>
+  <script src="js/app.js"></script>
+
+  <!-- ============ SERVICE WORKER ============ -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('sw.js').then(function(reg) {
+          console.log('SW registrado:', reg.scope);
+        }).catch(function(err) {
+          console.warn('SW error:', err);
+        });
+      });
+    }
+  </script>
+</body>
+</html>
