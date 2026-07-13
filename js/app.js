@@ -656,13 +656,6 @@
 
     $('#modal-container').innerHTML = '';
     renderBoletas();
-
-    // Preguntar si compartir
-    setTimeout(() => {
-      if (confirm('¿Desea compartir esta boleta por WhatsApp o Telegram?')) {
-        compartirBoleta(id);
-      }
-    }, 200);
   }
 
   function eliminarBoleta(id) {
