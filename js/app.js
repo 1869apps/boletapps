@@ -817,6 +817,7 @@
       tipoCombustible: $('#rep-combustible').value,
       tipoPago: $('#rep-tipo-pago').value
     };
+    const tipoReporte = $('#rep-tipo-reporte').value;
 
     if (!filtros.fechaInicio && !filtros.fechaFin) {
       toast('Seleccione al menos una fecha', 'error');
@@ -825,7 +826,7 @@
 
     const boletas = BoletappsDB.filtrarBoletas(filtros);
 
-    // Resumen
+    // Resumen general (común a todos los tipos)
     const total = boletas.reduce((sum, b) => sum + (parseFloat(b.cantidad) || 0), 0);
     const totalPrivado = boletas.filter(b => b.tipoPago === 'PRIVADO').reduce((s, b) => s + (parseFloat(b.cantidad) || 0), 0);
     const totalEstatal = boletas.filter(b => b.tipoPago === 'ESTATAL').reduce((s, b) => s + (parseFloat(b.cantidad) || 0), 0);
@@ -851,35 +852,62 @@
       </div>
     `;
 
-    // Agrupar por fecha
-    const porFecha = {};
-    boletas.forEach(b => {
-      if (!porFecha[b.fecha]) porFecha[b.fecha] = [];
-      porFecha[b.fecha].push(b);
-    });
+    // Generar detalle según tipo de reporte
+    let detalleHtml = '';
+    let grupos = []; // Para exportación
 
-    const fechas = Object.keys(porFecha).sort();
-    let detalleHtml = fechas.map(fecha => {
-      const items = porFecha[fecha];
-      const subtotal = items.reduce((s, b) => s + (parseFloat(b.cantidad) || 0), 0);
-      return `
-        <div class="ba-report-group">
-          <div class="ba-report-group-title">
-            <span>📅 ${fechaLarga(fecha)}</span>
-            <span>${items.length} boletas | ${subtotal.toFixed(2)} total</span>
-          </div>
-          ${items.map(b => `
-            <div class="ba-parte-row">
-              <span class="label">${escapeHtml(b.id)} · ${escapeHtml(b.chapa)} · ${escapeHtml(b.tipoCombustible)} · ${escapeHtml(b.tipoPago)}</span>
-              <span class="value">${escapeHtml(b.cantidad)}</span>
-            </div>
-          `).join('')}
-        </div>
-      `;
-    }).join('');
-
-    if (fechas.length === 0) {
-      detalleHtml = '<div class="ba-empty"><div class="ba-empty-icon">📊</div><p>No hay boletas en el rango seleccionado.</p></div>';
+    if (tipoReporte === 'general') {
+      // Reporte general: agrupado por fecha
+      const porFecha = {};
+      boletas.forEach(b => {
+        if (!porFecha[b.fecha]) porFecha[b.fecha] = [];
+        porFecha[b.fecha].push(b);
+      });
+      const fechas = Object.keys(porFecha).sort();
+      grupos = fechas.map(fecha => ({
+        titulo: fechaLarga(fecha),
+        key: fecha,
+        boletas: porFecha[fecha]
+      }));
+      detalleHtml = fechas.length === 0
+        ? emptyHtml()
+        : grupos.map(g => renderGrupo(g, 'fecha')).join('');
+    }
+    else if (tipoReporte === 'combustible') {
+      // Reporte por combustible: agrupado por tipoCombustible
+      const porCombustible = {};
+      boletas.forEach(b => {
+        const k = b.tipoCombustible || 'Sin especificar';
+        if (!porCombustible[k]) porCombustible[k] = [];
+        porCombustible[k].push(b);
+      });
+      const tipos = Object.keys(porCombustible).sort();
+      grupos = tipos.map(t => ({
+        titulo: '🛢️ ' + t,
+        key: t,
+        boletas: porCombustible[t]
+      }));
+      detalleHtml = tipos.length === 0
+        ? emptyHtml()
+        : grupos.map(g => renderGrupo(g, 'combustible')).join('');
+    }
+    else if (tipoReporte === 'asignacion') {
+      // Reporte por asignación: agrupado por asignacionA
+      const porAsignacion = {};
+      boletas.forEach(b => {
+        const k = b.asignacionA || 'Sin asignar';
+        if (!porAsignacion[k]) porAsignacion[k] = [];
+        porAsignacion[k].push(b);
+      });
+      const personas = Object.keys(porAsignacion).sort();
+      grupos = personas.map(p => ({
+        titulo: '👥 ' + p,
+        key: p,
+        boletas: porAsignacion[p]
+      }));
+      detalleHtml = personas.length === 0
+        ? emptyHtml()
+        : grupos.map(g => renderGrupo(g, 'asignacion')).join('');
     }
 
     const accionesHtml = boletas.length > 0 ? `
@@ -892,15 +920,15 @@
     ` : '';
 
     // Guardar datos del último reporte para exportación
-    ultimoReporte = { boletas, filtros, total, totalPrivado, totalEstatal };
+    ultimoReporte = { boletas, filtros, total, totalPrivado, totalEstatal, tipoReporte, grupos };
 
     $('#reporte-resultado').innerHTML = summaryHtml + detalleHtml + accionesHtml;
 
     const btnShare = $('#btn-share-reporte-wa');
     if (btnShare) {
       btnShare.addEventListener('click', () => {
-        const titulo = `Reporte: ${filtros.fechaInicio || 'Inicio'} a ${filtros.fechaFin || 'Fin'}`;
-        const texto = BoletappsShare.formatearReporteTexto(titulo, boletas, total.toFixed(2));
+        const titulo = `Reporte ${tipoReporte}: ${filtros.fechaInicio || 'Inicio'} a ${filtros.fechaFin || 'Fin'}`;
+        const texto = formatearReporteTextoPorTipo(titulo, boletas, total, tipoReporte, grupos);
         BoletappsShare.mostrarOpcionesCompartir(texto, 'Compartir Reporte');
       });
     }
@@ -912,12 +940,92 @@
     if (btnCsv) btnCsv.addEventListener('click', exportarReporteCSV);
   }
 
+  function emptyHtml() {
+    return '<div class="ba-empty"><div class="ba-empty-icon">📊</div><p>No hay boletas en el rango seleccionado.</p></div>';
+  }
+
+  function renderGrupo(grupo, tipoReporte) {
+    const subtotal = grupo.boletas.reduce((s, b) => s + (parseFloat(b.cantidad) || 0), 0);
+    const privado = grupo.boletas.filter(b => b.tipoPago === 'PRIVADO').reduce((s, b) => s + (parseFloat(b.cantidad) || 0), 0);
+    const estatal = grupo.boletas.filter(b => b.tipoPago === 'ESTATAL').reduce((s, b) => s + (parseFloat(b.cantidad) || 0), 0);
+    const chapas = [...new Set(grupo.boletas.map(b => b.chapa).filter(Boolean))];
+
+    let infoExtra = '';
+    if (tipoReporte === 'combustible') {
+      infoExtra = `${grupo.boletas.length} boletas | Privado: ${privado.toFixed(2)} · Estatal: ${estatal.toFixed(2)}`;
+    } else if (tipoReporte === 'asignacion') {
+      infoExtra = `${grupo.boletas.length} boletas | CHAPAS: ${chapas.join(', ') || '—'}`;
+    } else {
+      infoExtra = `${grupo.boletas.length} boletas | Privado: ${privado.toFixed(2)} · Estatal: ${estatal.toFixed(2)}`;
+    }
+
+    // Para reporte por combustible: mostrar cada boleta con su asignación
+    // Para reporte por asignación: mostrar cada boleta con su combustible
+    const filas = grupo.boletas.map(b => {
+      let detalle = '';
+      if (tipoReporte === 'combustible') {
+        detalle = `${escapeHtml(b.id)} · ${escapeHtml(b.asignacionA || '—')} · ${escapeHtml(b.chapa || '—')} · ${escapeHtml(b.tipoPago)}`;
+      } else if (tipoReporte === 'asignacion') {
+        detalle = `${escapeHtml(b.id)} · ${fechaLarga(b.fecha)} · ${escapeHtml(b.tipoCombustible)} · ${escapeHtml(b.tipoPago)}`;
+      } else {
+        detalle = `${escapeHtml(b.id)} · ${escapeHtml(b.chapa)} · ${escapeHtml(b.tipoCombustible)} · ${escapeHtml(b.tipoPago)}`;
+      }
+      return `
+        <div class="ba-parte-row">
+          <span class="label">${detalle}</span>
+          <span class="value">${escapeHtml(b.cantidad)}</span>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="ba-report-group">
+        <div class="ba-report-group-title">
+          <span>${escapeHtml(grupo.titulo)}</span>
+          <span style="font-weight:600;color:var(--ba-primary);">${subtotal.toFixed(2)} total</span>
+        </div>
+        <div style="font-size:11px;color:var(--ba-text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.04em;">${infoExtra}</div>
+        ${filas}
+      </div>
+    `;
+  }
+
+  function formatearReporteTextoPorTipo(titulo, boletas, total, tipoReporte, grupos) {
+    const tipoLabel = {
+      general: 'Reporte General (por fecha)',
+      combustible: 'Reporte Detallado por Combustible',
+      asignacion: 'Reporte Detallado por Asignación'
+    }[tipoReporte] || 'Reporte';
+
+    const lines = [`📊 ${tipoLabel}`, '─────────────────────'];
+    grupos.forEach(g => {
+      const subtotal = g.boletas.reduce((s, b) => s + (parseFloat(b.cantidad) || 0), 0);
+      lines.push(`\n■ ${g.titulo} (${g.boletas.length} boletas, total: ${subtotal.toFixed(2)})`);
+      g.boletas.forEach(b => {
+        let detalle = '';
+        if (tipoReporte === 'combustible') {
+          detalle = `  · ${b.id} | ${b.asignacionA || '—'} | ${b.chapa || '—'} | ${b.tipoPago} | ${b.cantidad}`;
+        } else if (tipoReporte === 'asignacion') {
+          detalle = `  · ${b.id} | ${b.fecha} | ${b.tipoCombustible} | ${b.tipoPago} | ${b.cantidad}`;
+        } else {
+          detalle = `  · ${b.id} | ${b.chapa} | ${b.tipoCombustible} | ${b.tipoPago} | ${b.cantidad}`;
+        }
+        lines.push(detalle);
+      });
+    });
+    lines.push('\n─────────────────────');
+    lines.push(`Total boletas: ${boletas.length}`);
+    lines.push(`Total combustible: ${total.toFixed(2)}`);
+    lines.push('BoletApps');
+    return lines.join('\n');
+  }
+
   // ====== EXPORTACIONES ======
   let ultimoReporte = null;
 
   function exportarReportePDF() {
     if (!ultimoReporte) return;
-    const { boletas, filtros, total, totalPrivado, totalEstatal } = ultimoReporte;
+    const { boletas, filtros, total, totalPrivado, totalEstatal, tipoReporte, grupos } = ultimoReporte;
     if (typeof window.jspdf === 'undefined') {
       toast('Librería PDF no disponible', 'error');
       return;
@@ -927,90 +1035,169 @@
     const W = 210, M = 15;
     let y = 18;
 
+    const tipoLabel = {
+      general: 'Reporte General',
+      combustible: 'Reporte Detallado por Combustible',
+      asignacion: 'Reporte Detallado por Asignación'
+    }[tipoReporte] || 'Reporte';
+
     // Título
-    doc.setFontSize(18);
-    doc.setTextColor(13, 110, 253);
-    doc.text('BoletApps - Reporte de Combustible', M, y);
+    doc.setFontSize(16);
+    doc.setTextColor(79, 70, 229);
+    doc.text('BoletApps', M, y);
+    y += 7;
+    doc.setFontSize(13);
+    doc.setTextColor(15, 23, 42);
+    doc.text(tipoLabel, M, y);
     y += 7;
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text(`Periodo: ${filtros.fechaInicio || 'Inicio'} a ${filtros.fechaFin || 'Fin'}`, M, y);
-    y += 5;
-    doc.text(`Generado: ${new Date().toLocaleString('es-ES')}`, M, y);
-    y += 8;
+    doc.text(`Periodo: ${filtros.fechaInicio || 'Inicio'} a ${filtros.fechaFin || 'Fin'}`, M, y); y += 5;
+    doc.text(`Generado: ${new Date().toLocaleString('es-ES')}`, M, y); y += 5;
+    if (filtros.servicentro !== 'todos') { doc.text(`Servicentro: ${filtros.servicentro}`, M, y); y += 5; }
+    if (filtros.tipoCombustible !== 'todos') { doc.text(`Combustible: ${filtros.tipoCombustible}`, M, y); y += 5; }
+    if (filtros.tipoPago !== 'todos') { doc.text(`Tipo pago: ${filtros.tipoPago}`, M, y); y += 5; }
+    y += 3;
 
     // Resumen
-    doc.setFontSize(12);
-    doc.setTextColor(0);
-    doc.text('Resumen', M, y);
-    y += 5;
-    doc.setFontSize(10);
-    doc.setTextColor(60);
-    doc.text(`Total boletas: ${boletas.length}`, M, y); y += 4.5;
-    doc.text(`Total combustible: ${total.toFixed(2)}`, M, y); y += 4.5;
-    doc.text(`Privado: ${totalPrivado.toFixed(2)}  |  Estatal: ${totalEstatal.toFixed(2)}`, M, y); y += 4.5;
-    if (filtros.servicentro !== 'todos') { doc.text(`Servicentro: ${filtros.servicentro}`, M, y); y += 4.5; }
-    if (filtros.tipoCombustible !== 'todos') { doc.text(`Combustible: ${filtros.tipoCombustible}`, M, y); y += 4.5; }
-    if (filtros.tipoPago !== 'todos') { doc.text(`Tipo pago: ${filtros.tipoPago}`, M, y); y += 4.5; }
-    y += 4;
-
-    // Tabla
     doc.setFontSize(11);
     doc.setTextColor(0);
-    doc.text('Detalle de Boletas', M, y);
-    y += 5;
+    doc.text('Resumen General', M, y); y += 5;
+    doc.setFontSize(10);
+    doc.setTextColor(60);
+    doc.text(`Total boletas: ${boletas.length}`, M, y); y += 5;
+    doc.text(`Total combustible: ${total.toFixed(2)}`, M, y); y += 5;
+    doc.text(`Privado: ${totalPrivado.toFixed(2)}  |  Estatal: ${totalEstatal.toFixed(2)}`, M, y); y += 7;
 
-    // Cabecera tabla
-    const cols = ['#', 'ID', 'Fecha', 'Servicentro', 'Combustible', 'Cant.', 'CHAPA', 'Pago', 'Asignación'];
-    const widths = [8, 16, 22, 32, 28, 14, 18, 16, 30];
-    doc.setFontSize(8);
-    doc.setFillColor(13, 110, 253);
-    doc.setTextColor(255);
-    doc.rect(M, y - 4, W - 2 * M, 6, 'F');
-    let x = M;
-    cols.forEach((c, i) => {
-      doc.text(c, x + 1, y);
-      x += widths[i];
-    });
-    y += 6;
+    // Para reporte por combustible/asignación: tabla resumen de grupos
+    if (tipoReporte !== 'general' && grupos.length > 0) {
+      if (y > 270) { doc.addPage(); y = 18; }
+      doc.setFontSize(11);
+      doc.setTextColor(0);
+      doc.text(tipoReporte === 'combustible' ? 'Resumen por Combustible' : 'Resumen por Asignación', M, y); y += 5;
 
-    // Filas
-    doc.setTextColor(40);
-    boletas.forEach((b, idx) => {
-      if (y > 280) {
-        doc.addPage();
-        y = 18;
-      }
-      // Fila alterna
-      if (idx % 2 === 0) {
-        doc.setFillColor(245, 247, 251);
-        doc.rect(M, y - 4, W - 2 * M, 5, 'F');
-      }
-      x = M;
-      const cells = [
-        String(idx + 1),
-        b.id,
-        b.fecha,
-        (b.servicentro || '').substring(0, 18),
-        (b.tipoCombustible || '').substring(0, 16),
-        String(b.cantidad),
-        (b.chapa || '').substring(0, 10),
-        (b.tipoPago || '').substring(0, 8),
-        (b.asignacionA || '').substring(0, 18)
-      ];
-      cells.forEach((cell, i) => {
-        doc.text(String(cell), x + 1, y);
-        x += widths[i];
+      // Cabecera
+      const colsR = [tipoReporte === 'combustible' ? 'Combustible' : 'Asignación', 'Boletas', 'Total', 'Privado', 'Estatal'];
+      const widthsR = [60, 25, 30, 30, 30];
+      doc.setFontSize(9);
+      doc.setFillColor(79, 70, 229);
+      doc.setTextColor(255);
+      doc.rect(M, y - 4, 175, 6, 'F');
+      let xR = M;
+      colsR.forEach((c, i) => { doc.text(c, xR + 1, y); xR += widthsR[i]; });
+      y += 6;
+
+      doc.setTextColor(40);
+      grupos.forEach((g, idx) => {
+        if (y > 280) { doc.addPage(); y = 18; }
+        if (idx % 2 === 0) {
+          doc.setFillColor(245, 247, 251);
+          doc.rect(M, y - 4, 175, 5, 'F');
+        }
+        const subtotal = g.boletas.reduce((s, b) => s + (parseFloat(b.cantidad) || 0), 0);
+        const priv = g.boletas.filter(b => b.tipoPago === 'PRIVADO').reduce((s, b) => s + (parseFloat(b.cantidad) || 0), 0);
+        const est = g.boletas.filter(b => b.tipoPago === 'ESTATAL').reduce((s, b) => s + (parseFloat(b.cantidad) || 0), 0);
+        const tituloLimpio = g.titulo.replace(/^[🛢️👥📅]\s*/, '').substring(0, 35);
+        const cellsR = [tituloLimpio, String(g.boletas.length), subtotal.toFixed(2), priv.toFixed(2), est.toFixed(2)];
+        xR = M;
+        cellsR.forEach((cell, i) => { doc.text(String(cell), xR + 1, y); xR += widthsR[i]; });
+        y += 5;
       });
       y += 5;
+    }
+
+    // Detalle por grupos
+    if (y > 260) { doc.addPage(); y = 18; }
+    doc.setFontSize(11);
+    doc.setTextColor(0);
+    doc.text('Detalle', M, y); y += 6;
+
+    grupos.forEach(g => {
+      if (y > 270) { doc.addPage(); y = 18; }
+      // Cabecera de grupo
+      const subtotal = g.boletas.reduce((s, b) => s + (parseFloat(b.cantidad) || 0), 0);
+      doc.setFontSize(10);
+      doc.setTextColor(79, 70, 229);
+      doc.setFillColor(238, 242, 255);
+      doc.rect(M, y - 4, W - 2 * M, 6, 'F');
+      const tituloLimpio = g.titulo.replace(/^[🛢️👥📅]\s*/, '').substring(0, 60);
+      doc.text(tituloLimpio, M + 1, y);
+      doc.text(`${g.boletas.length} boletas | ${subtotal.toFixed(2)}`, W - M - 50, y);
+      y += 6;
+
+      // Cabecera de tabla según tipo
+      let cols, widths;
+      if (tipoReporte === 'combustible') {
+        cols = ['#', 'ID', 'Fecha', 'Asignación', 'CHAPA', 'Pago', 'Cant.'];
+        widths = [8, 16, 22, 50, 22, 20, 18];
+      } else if (tipoReporte === 'asignacion') {
+        cols = ['#', 'ID', 'Fecha', 'Combustible', 'CHAPA', 'Pago', 'Cant.'];
+        widths = [8, 16, 22, 40, 22, 20, 18];
+      } else {
+        cols = ['#', 'ID', 'Servicentro', 'Combustible', 'CHAPA', 'Pago', 'Asignación', 'Cant.'];
+        widths = [8, 16, 30, 28, 18, 16, 30, 14];
+      }
+      doc.setFontSize(8);
+      doc.setFillColor(79, 70, 229);
+      doc.setTextColor(255);
+      doc.rect(M, y - 3, W - 2 * M, 5, 'F');
+      let x = M;
+      cols.forEach((c, i) => { doc.text(c, x + 1, y); x += widths[i]; });
+      y += 5;
+
+      // Filas
+      doc.setTextColor(40);
+      g.boletas.forEach((b, idx) => {
+        if (y > 282) { doc.addPage(); y = 18; }
+        if (idx % 2 === 0) {
+          doc.setFillColor(245, 247, 251);
+          doc.rect(M, y - 3, W - 2 * M, 5, 'F');
+        }
+        x = M;
+        let cells;
+        if (tipoReporte === 'combustible') {
+          cells = [
+            String(idx + 1), b.id, b.fecha,
+            (b.asignacionA || '').substring(0, 28),
+            (b.chapa || '').substring(0, 12),
+            (b.tipoPago || '').substring(0, 8),
+            String(b.cantidad)
+          ];
+        } else if (tipoReporte === 'asignacion') {
+          cells = [
+            String(idx + 1), b.id, b.fecha,
+            (b.tipoCombustible || '').substring(0, 22),
+            (b.chapa || '').substring(0, 12),
+            (b.tipoPago || '').substring(0, 8),
+            String(b.cantidad)
+          ];
+        } else {
+          cells = [
+            String(idx + 1), b.id,
+            (b.servicentro || '').substring(0, 17),
+            (b.tipoCombustible || '').substring(0, 16),
+            (b.chapa || '').substring(0, 10),
+            (b.tipoPago || '').substring(0, 8),
+            (b.asignacionA || '').substring(0, 17),
+            String(b.cantidad)
+          ];
+        }
+        cells.forEach((cell, i) => {
+          doc.text(String(cell), x + 1, y);
+          x += widths[i];
+        });
+        y += 5;
+      });
+      y += 3;
     });
 
-    // Total al final
+    // Total final
+    if (y > 282) { doc.addPage(); y = 18; }
     y += 2;
-    doc.setDrawColor(13, 110, 253);
+    doc.setDrawColor(79, 70, 229);
     doc.line(M, y - 2, W - M, y - 2);
     doc.setFontSize(10);
-    doc.setTextColor(13, 110, 253);
+    doc.setTextColor(79, 70, 229);
     doc.text(`TOTAL: ${total.toFixed(2)}  (${boletas.length} boletas)`, M, y + 3);
 
     // Pie de página en todas las páginas
@@ -1019,27 +1206,32 @@
       doc.setPage(i);
       doc.setFontSize(8);
       doc.setTextColor(150);
-      doc.text('BoletApps - Reporte generado automáticamente', M, 290);
-      doc.text(`Página ${i} de ${pageCount}`, W - M - 20, 290);
+      doc.text('BoletApps - ' + tipoLabel, M, 290);
+      doc.text(`Pagina ${i} de ${pageCount}`, W - M - 20, 290);
     }
 
-    const nombre = `reporte-boletapps-${filtros.fechaInicio || 'ini'}-a-${filtros.fechaFin || 'fin'}.pdf`;
+    const nombre = `reporte-${tipoReporte}-boletapps-${filtros.fechaInicio || 'ini'}-a-${filtros.fechaFin || 'fin'}.pdf`;
     doc.save(nombre);
     toast('PDF generado', 'success');
   }
 
   function exportarReporteExcel() {
     if (!ultimoReporte) return;
-    const { boletas, filtros, total, totalPrivado, totalEstatal } = ultimoReporte;
+    const { boletas, filtros, total, totalPrivado, totalEstatal, tipoReporte, grupos } = ultimoReporte;
     if (typeof XLSX === 'undefined') {
       toast('Librería Excel no disponible', 'error');
       return;
     }
     const wb = XLSX.utils.book_new();
+    const tipoLabel = {
+      general: 'Reporte General',
+      combustible: 'Reporte por Combustible',
+      asignacion: 'Reporte por Asignación'
+    }[tipoReporte] || 'Reporte';
 
     // Hoja 1: Resumen
     const resumenData = [
-      ['BoletApps - Reporte de Combustible'],
+      ['BoletApps - ' + tipoLabel],
       ['Periodo', `${filtros.fechaInicio || 'Inicio'} a ${filtros.fechaFin || 'Fin'}`],
       ['Generado', new Date().toLocaleString('es-ES')],
       ['Servicentro', filtros.servicentro || 'Todos'],
@@ -1056,40 +1248,97 @@
     ws1['!cols'] = [{ wch: 25 }, { wch: 30 }];
     XLSX.utils.book_append_sheet(wb, ws1, 'Resumen');
 
-    // Hoja 2: Detalle
-    const detalleData = [
-      ['#', 'ID Boleta', 'Fecha', 'Servicentro', 'Asignación a', 'Tipo Combustible', 'Cantidad', 'CHAPA', 'Tipo Pago']
-    ];
-    boletas.forEach((b, idx) => {
-      detalleData.push([
-        idx + 1, b.id, b.fecha, b.servicentro, b.asignacionA,
-        b.tipoCombustible, Number(b.cantidad), b.chapa, b.tipoPago
-      ]);
+    // Hoja 2: Resumen por grupo (solo para combustible/asignación)
+    if (tipoReporte !== 'general' && grupos.length > 0) {
+      const grupoHeader = [tipoReporte === 'combustible' ? 'Combustible' : 'Asignación', 'Boletas', 'Total', 'Privado', 'Estatal'];
+      const grupoData = [grupoHeader];
+      grupos.forEach(g => {
+        const subtotal = g.boletas.reduce((s, b) => s + (parseFloat(b.cantidad) || 0), 0);
+        const priv = g.boletas.filter(b => b.tipoPago === 'PRIVADO').reduce((s, b) => s + (parseFloat(b.cantidad) || 0), 0);
+        const est = g.boletas.filter(b => b.tipoPago === 'ESTATAL').reduce((s, b) => s + (parseFloat(b.cantidad) || 0), 0);
+        const tituloLimpio = g.titulo.replace(/^[🛢️👥📅]\s*/, '');
+        grupoData.push([tituloLimpio, g.boletas.length, Number(subtotal.toFixed(2)), Number(priv.toFixed(2)), Number(est.toFixed(2))]);
+      });
+      // Total
+      grupoData.push([]);
+      grupoData.push(['TOTAL', boletas.length, Number(total.toFixed(2)), Number(totalPrivado.toFixed(2)), Number(totalEstatal.toFixed(2))]);
+      const wsG = XLSX.utils.aoa_to_sheet(grupoData);
+      wsG['!cols'] = [{ wch: 30 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
+      XLSX.utils.book_append_sheet(wb, wsG, 'Resumen por ' + (tipoReporte === 'combustible' ? 'Combustible' : 'Asignación'));
+    }
+
+    // Hoja 3: Detalle completo (con columna de grupo)
+    let detalleHeader;
+    if (tipoReporte === 'combustible') {
+      detalleHeader = ['#', 'ID Boleta', 'Fecha', 'Combustible', 'Asignación a', 'Cantidad', 'CHAPA', 'Tipo Pago', 'Servicentro'];
+    } else if (tipoReporte === 'asignacion') {
+      detalleHeader = ['#', 'ID Boleta', 'Fecha', 'Asignación a', 'Tipo Combustible', 'Cantidad', 'CHAPA', 'Tipo Pago', 'Servicentro'];
+    } else {
+      detalleHeader = ['#', 'ID Boleta', 'Fecha', 'Servicentro', 'Asignación a', 'Tipo Combustible', 'Cantidad', 'CHAPA', 'Tipo Pago'];
+    }
+    const detalleData = [detalleHeader];
+    let idx = 1;
+    grupos.forEach(g => {
+      g.boletas.forEach(b => {
+        let row;
+        if (tipoReporte === 'combustible') {
+          row = [idx, b.id, b.fecha, b.tipoCombustible, b.asignacionA, Number(b.cantidad), b.chapa, b.tipoPago, b.servicentro];
+        } else if (tipoReporte === 'asignacion') {
+          row = [idx, b.id, b.fecha, b.asignacionA, b.tipoCombustible, Number(b.cantidad), b.chapa, b.tipoPago, b.servicentro];
+        } else {
+          row = [idx, b.id, b.fecha, b.servicentro, b.asignacionA, b.tipoCombustible, Number(b.cantidad), b.chapa, b.tipoPago];
+        }
+        detalleData.push(row);
+        idx++;
+      });
     });
-    // Fila de totales
     detalleData.push([]);
-    detalleData.push(['', '', '', '', '', 'TOTAL', Number(total.toFixed(2)), '', '']);
+    // Fila de total
+    const totalRow = ['', '', '', '', '', 'TOTAL', Number(total.toFixed(2)), '', ''];
+    detalleData.push(totalRow);
     const ws2 = XLSX.utils.aoa_to_sheet(detalleData);
     ws2['!cols'] = [
       { wch: 5 }, { wch: 12 }, { wch: 12 }, { wch: 22 }, { wch: 22 },
-      { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 12 }
+      { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 22 }
     ];
     XLSX.utils.book_append_sheet(wb, ws2, 'Detalle');
 
-    const nombre = `reporte-boletapps-${filtros.fechaInicio || 'ini'}-a-${filtros.fechaFin || 'fin'}.xlsx`;
+    const nombre = `reporte-${tipoReporte}-boletapps-${filtros.fechaInicio || 'ini'}-a-${filtros.fechaFin || 'fin'}.xlsx`;
     XLSX.writeFile(wb, nombre);
     toast('Excel generado', 'success');
   }
 
   function exportarReporteCSV() {
     if (!ultimoReporte) return;
-    const { boletas, filtros, total } = ultimoReporte;
-    const header = ['ID Boleta', 'Fecha', 'Servicentro', 'Asignacion', 'Tipo Combustible', 'Cantidad', 'CHAPA', 'Tipo Pago'];
-    const rows = boletas.map(b => [
-      b.id, b.fecha, b.servicentro, b.asignacionA, b.tipoCombustible,
-      b.cantidad, b.chapa, b.tipoPago
-    ]);
-    rows.push(['', '', '', '', 'TOTAL', total.toFixed(2), '', '']);
+    const { boletas, filtros, total, tipoReporte, grupos } = ultimoReporte;
+
+    let header;
+    if (tipoReporte === 'combustible') {
+      header = ['Combustible', 'ID Boleta', 'Fecha', 'Asignacion', 'Cantidad', 'CHAPA', 'Tipo Pago', 'Servicentro'];
+    } else if (tipoReporte === 'asignacion') {
+      header = ['Asignacion', 'ID Boleta', 'Fecha', 'Tipo Combustible', 'Cantidad', 'CHAPA', 'Tipo Pago', 'Servicentro'];
+    } else {
+      header = ['ID Boleta', 'Fecha', 'Servicentro', 'Asignacion', 'Tipo Combustible', 'Cantidad', 'CHAPA', 'Tipo Pago'];
+    }
+    const rows = [];
+    grupos.forEach(g => {
+      const tituloLimpio = g.titulo.replace(/^[🛢️👥📅]\s*/, '');
+      g.boletas.forEach(b => {
+        if (tipoReporte === 'combustible') {
+          rows.push([tituloLimpio, b.id, b.fecha, b.asignacionA, b.cantidad, b.chapa, b.tipoPago, b.servicentro]);
+        } else if (tipoReporte === 'asignacion') {
+          rows.push([tituloLimpio, b.id, b.fecha, b.tipoCombustible, b.cantidad, b.chapa, b.tipoPago, b.servicentro]);
+        } else {
+          rows.push([b.id, b.fecha, b.servicentro, b.asignacionA, b.tipoCombustible, b.cantidad, b.chapa, b.tipoPago]);
+        }
+      });
+    });
+    // Total
+    if (tipoReporte === 'general') {
+      rows.push(['', '', '', '', 'TOTAL', total.toFixed(2), '', '']);
+    } else {
+      rows.push(['', '', '', 'TOTAL', total.toFixed(2), '', '', '']);
+    }
 
     const csv = [header, ...rows]
       .map(r => r.map(c => {
@@ -1101,7 +1350,7 @@
       .join('\n');
 
     const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
-    const nombre = `reporte-boletapps-${filtros.fechaInicio || 'ini'}-a-${filtros.fechaFin || 'fin'}.csv`;
+    const nombre = `reporte-${tipoReporte}-boletapps-${filtros.fechaInicio || 'ini'}-a-${filtros.fechaFin || 'fin'}.csv`;
     if (typeof saveAs !== 'undefined') {
       saveAs(blob, nombre);
     } else {
