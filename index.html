@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#4f46e5" />
+  <meta name="theme-color" content="#047857" />
   <meta name="description" content="BoletApps - Registro de asignaciones de combustible" />
   <title>BoletApps</title>
   <link rel="stylesheet" href="css/styles.css" />
@@ -48,19 +48,71 @@
   <!-- ============ APP ============ -->
   <div id="app-screen" class="ba-app" hidden>
 
-    <!-- OFFLINE BANNER -->
-    <div id="offline-banner" class="ba-offline-banner">📡 Sin conexión — modo offline activo</div>
-
-    <!-- HEADER -->
-    <header class="ba-header">
-      <div class="ba-header-title">
-        <span class="ba-header-logo">⛽</span>
-        <span>BoletApps</span>
+    <!-- SIDEBAR -->
+    <aside class="ba-sidebar" id="sidebar">
+      <div class="ba-sidebar-header">
+        <div class="ba-sidebar-logo">⛽</div>
+        <div>
+          <div class="ba-sidebar-brand">BoletApps</div>
+          <div class="ba-sidebar-brand-sub">Fuel Manager</div>
+        </div>
       </div>
-      <div class="ba-header-section" id="header-section-name">Dashboard</div>
-      <button id="theme-toggle" class="ba-theme-toggle" title="Cambiar tema">🌙</button>
-      <button id="logout-btn" class="ba-header-logout" title="Cerrar sesión">⏻</button>
-    </header>
+      <nav class="ba-sidebar-nav">
+        <div class="ba-sidebar-section-label">Principal</div>
+        <button class="ba-sidebar-item active" data-target="dashboard">
+          <span class="ba-sidebar-item-icon">📊</span>
+          <span>Dashboard</span>
+        </button>
+        <button class="ba-sidebar-item" data-target="registro">
+          <span class="ba-sidebar-item-icon">🧾</span>
+          <span>Registro</span>
+        </button>
+        <button class="ba-sidebar-item" data-target="partes">
+          <span class="ba-sidebar-item-icon">📋</span>
+          <span>Partes Diarios</span>
+        </button>
+        <button class="ba-sidebar-item" data-target="reportes">
+          <span class="ba-sidebar-item-icon">📈</span>
+          <span>Reportes</span>
+        </button>
+
+        <div class="ba-sidebar-section-label">Sistema</div>
+        <button class="ba-sidebar-item" data-target="config">
+          <span class="ba-sidebar-item-icon">⚙️</span>
+          <span>Configuración</span>
+        </button>
+        <button class="ba-sidebar-item" data-target="admin">
+          <span class="ba-sidebar-item-icon">🛠️</span>
+          <span>Administración</span>
+        </button>
+      </nav>
+      <div class="ba-sidebar-footer">
+        <button id="theme-toggle-sidebar" title="Cambiar tema">🌙</button>
+        <button id="logout-btn-sidebar" title="Cerrar sesión">⏻</button>
+      </div>
+    </aside>
+
+    <!-- SIDEBAR OVERLAY (móvil) -->
+    <div class="ba-sidebar-overlay" id="sidebar-overlay"></div>
+
+    <!-- MAIN WRAP -->
+    <div class="ba-main-wrap">
+
+      <!-- OFFLINE BANNER -->
+      <div id="offline-banner" class="ba-offline-banner">📡 Sin conexión — modo offline activo</div>
+
+      <!-- HEADER -->
+      <header class="ba-header">
+        <button class="ba-menu-toggle" id="menu-toggle" title="Menú">☰</button>
+        <div class="ba-header-title-block">
+          <div class="ba-header-section" id="header-section-name">Dashboard</div>
+          <div class="ba-header-section-sub" id="header-section-sub">Control de combustible asignado</div>
+        </div>
+        <div class="ba-header-actions">
+          <button id="theme-toggle" class="ba-icon-btn" title="Cambiar tema">🌙</button>
+          <button id="logout-btn" class="ba-icon-btn" title="Cerrar sesión">⏻</button>
+        </div>
+      </header>
 
     <!-- MAIN CONTENT -->
     <main class="ba-main" id="main-content">
@@ -255,34 +307,8 @@
 
     </main>
 
-    <!-- BOTTOM NAV -->
-    <nav class="ba-bottom-nav">
-      <button class="ba-nav-item active" data-target="dashboard">
-        <span class="ba-nav-icon">📊</span>
-        <span>Dashboard</span>
-      </button>
-      <button class="ba-nav-item" data-target="registro">
-        <span class="ba-nav-icon">🧾</span>
-        <span>Registro</span>
-      </button>
-      <button class="ba-nav-item" data-target="partes">
-        <span class="ba-nav-icon">📋</span>
-        <span>Partes</span>
-      </button>
-      <button class="ba-nav-item" data-target="reportes">
-        <span class="ba-nav-icon">📈</span>
-        <span>Reportes</span>
-      </button>
-      <button class="ba-nav-item" data-target="config">
-        <span class="ba-nav-icon">⚙️</span>
-        <span>Config</span>
-      </button>
-      <button class="ba-nav-item" data-target="admin">
-        <span class="ba-nav-icon">🛠️</span>
-        <span>Admin</span>
-      </button>
-    </nav>
-  </div>
+    </div><!-- /.ba-main-wrap -->
+  </div><!-- /#app-screen -->
 
   <!-- ============ MODAL CONTAINER ============ -->
   <div id="modal-container"></div>

@@ -87,18 +87,22 @@
     $all('.ba-section').forEach(s => {
       s.hidden = s.dataset.section !== seccion;
     });
-    $all('.ba-nav-item').forEach(n => {
+    $all('.ba-sidebar-item').forEach(n => {
       n.classList.toggle('active', n.dataset.target === seccion);
     });
-    const nombres = {
-      dashboard: 'Dashboard',
-      registro: 'Registro',
-      partes: 'Partes Diarios',
-      reportes: 'Reportes',
-      config: 'Configuración',
-      admin: 'Administración'
-    };
-    $('#header-section-name').textContent = nombres[seccion] || '';
+    const info = {
+      dashboard: { title: 'Dashboard', sub: 'Control de combustible asignado' },
+      registro: { title: 'Registro de Boletas', sub: 'CRUD de asignaciones de combustible' },
+      partes: { title: 'Partes Diarios', sub: 'Combustible al amanecer por servicentro' },
+      reportes: { title: 'Reportes', sub: 'Control de combustible asignado por rango de fechas' },
+      config: { title: 'Configuración', sub: 'Configuración de servicentros y tipos de combustible' },
+      admin: { title: 'Administración', sub: 'Backups, import/export y código de acceso' }
+    }[seccion] || { title: seccion, sub: '' };
+    $('#header-section-name').textContent = info.title;
+    $('#header-section-sub').textContent = info.sub;
+
+    // Cerrar sidebar en móvil
+    cerrarSidebar();
 
     // Destruir gráficos al salir del dashboard
     if (seccionAnterior === 'dashboard' && seccion !== 'dashboard') {
@@ -118,19 +122,35 @@
     window.scrollTo(0, 0);
   }
 
+  // ====== SIDEBAR (móvil) ======
+  function abrirSidebar() {
+    $('#sidebar').classList.add('open');
+    $('#sidebar-overlay').classList.add('show');
+  }
+
+  function cerrarSidebar() {
+    $('#sidebar').classList.remove('open');
+    $('#sidebar-overlay').classList.remove('show');
+  }
+
   // ====== INICIALIZACIÓN APP ======
   function inicializarApp() {
-    // Logout
+    // Logout (header + sidebar)
     $('#logout-btn').addEventListener('click', logout);
+    $('#logout-btn-sidebar').addEventListener('click', logout);
 
-    // Tema (modo oscuro)
+    // Tema (modo oscuro) - header + sidebar
     inicializarTema();
 
     // Offline indicator
     inicializarOffline();
 
-    // Nav
-    $all('.ba-nav-item').forEach(btn => {
+    // Sidebar toggle (móvil)
+    $('#menu-toggle').addEventListener('click', abrirSidebar);
+    $('#sidebar-overlay').addEventListener('click', cerrarSidebar);
+
+    // Nav (sidebar items)
+    $all('.ba-sidebar-item').forEach(btn => {
       btn.addEventListener('click', () => navegar(btn.dataset.target));
     });
 
@@ -174,9 +194,8 @@
 
   // ====== MODO OSCURO ======
   function inicializarTema() {
-    const btn = $('#theme-toggle');
     actualizarIconoTema();
-    btn.addEventListener('click', () => {
+    const toggleTema = () => {
       const actual = document.documentElement.getAttribute('data-theme') || 'light';
       const nuevo = actual === 'dark' ? 'light' : 'dark';
       document.documentElement.setAttribute('data-theme', nuevo);
@@ -184,13 +203,19 @@
       actualizarIconoTema();
       // Re-renderizar dashboard para refrescar gráficos con nuevos colores
       if (seccionActual === 'dashboard') renderDashboard();
-    });
+    };
+    $('#theme-toggle').addEventListener('click', toggleTema);
+    const btnSidebar = $('#theme-toggle-sidebar');
+    if (btnSidebar) btnSidebar.addEventListener('click', toggleTema);
   }
 
   function actualizarIconoTema() {
     const actual = document.documentElement.getAttribute('data-theme') || 'light';
-    const btn = $('#theme-toggle');
-    if (btn) btn.textContent = actual === 'dark' ? '☀️' : '🌙';
+    const icon = actual === 'dark' ? '☀️' : '🌙';
+    const btnHeader = $('#theme-toggle');
+    if (btnHeader) btnHeader.textContent = icon;
+    const btnSidebar = $('#theme-toggle-sidebar');
+    if (btnSidebar) btnSidebar.textContent = icon;
   }
 
   // ====== OFFLINE INDICATOR ======
@@ -354,9 +379,9 @@
   function getChartColors() {
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     return {
-      text: isDark ? '#cbd5e1' : '#64748b',
-      grid: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.05)',
-      palette: ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#8b5cf6', '#ec4899', '#14b8a6']
+      text: isDark ? '#a3a3a3' : '#78716c',
+      grid: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+      palette: ['#047857', '#b45309', '#0e7490', '#7c3aed', '#be185d', '#15803d', '#1d4ed8', '#9f1239']
     };
   }
 
